@@ -32,7 +32,7 @@ X <- data.matrix(X)
 colnames(X) <- NULL
 
 # Initialize beta
-beta <- c(5, 0.1, 0.1)  # [1] 5.0 0.1 0.1 # current dimension 3*1
+beta <- c(1, 0.1, 0.1)  # [1] 5.0 0.1 0.1 # current dimension 3*1
 ```
 
 ```{r}
@@ -77,5 +77,7 @@ while (iter <= 100){ # max 100 iter
 ```
 
 ```{r}
-beta
+beta # matchs
 ```
+
+(Note: I found whether the convergence criteria is met depends on the initial value. It works well when I set beta to (1, 0.1, 0.1), but if I set it to something too far from the solution it's unable to converge, especially for beta2, and beta3. It runs into the issue of singular matrix). 
