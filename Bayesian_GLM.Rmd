@@ -1,0 +1,137 @@
+---
+title: "Bayesian GLM"
+author: "Linda Tang"
+date: "9/6/2021"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(warning = FALSE)
+knitr::opts_chunk$set(message = FALSE)
+library(tidyverse)
+library(patchwork)
+library(knitr)
+library(bayesplot)
+library(GGally)
+require(rstanarm)
+require(loo)
+require(bayesplot)
+require(caret)
+library(rstan)
+library(bridgesampling)
+
+bike <- read_csv("210830_bikecrash.csv")
+```
+
+### Question Formulation: 
+
+**Bayesian Logistic regression**: The response is binary (high crash vs. not high crash). The response will be denoted as 1 if it has > 60 crashes per 100,000 residents per year. 
+
+**Sampling Model**: $Y \mid \theta \sim Bern(\theta)$. We chose the logit link function $g(\theta) = log(\frac{\theta}{1-\theta}) = \eta$ and the systematic component $\eta = x^T\beta$. Overall the likelihood of a single observation is :
+
+$$ p (Y\mid\theta) = {n \choose y}\theta^y(1-\theta)^{n-y} = {n \choose y} (\frac{e^\eta}{1+e^\eta})^y(\frac{1}{1+e^\eta})^{n-y}$$
+**Prior**: Since we have little prior belief about which predictor will be significant and the relative magnitude/direction of their influence, we want to chose a weakly informative prior. We will use a t-prior for all coefficients $\beta_k$ and the intercept $\beta_o$. 
+
+$$
+\beta_1...\beta_N, \beta_o \sim \text{t} (7,0)
+$$
+
+### Data Manipulation
+
+I created a binary response variable. I noticed that the population and pct_rural are on quite different scales, so I scaled them and saved it into the original dataframe. 
+
+```{r}
+bike <- bike %>%
+  mutate(high_crashes = ifelse(crashes*100000/pop > 60, 1, 0)) %>%
+  mutate(pop = scale(pop)) %>%
+  mutate(pct_rural = scale(pct_rural))
+```
+
+### Fitting the model
+
+```{r}
+model <- stan_glm(high_crashes ~ pop + pct_rural, # only used these 2 predictors
+                 data = bike,
+                 family = binomial(link = "logit"),
+                 prior = student_t(df = 7, 0),
+                 prior_intercept = student_t(df = 7, 0), 
+                 cores = 4,
+                 chains = 4, # run 4 MCMC chains
+                 iter = 1000, 
+                 seed = 12345)
+```
+
+### Model Diagnoistics
+
+Some model diagnostic plots are shown below:
+
+```{r fig.height=5, fig.width=10}
+# all chains converged & mixed well
+color_scheme_set("mix-blue-red")
+plot(model, "trace")
+```
+
+```{r fig.height=5, fig.width=10}
+# all chains converged & mixed well
+plot(model, "trace", pars = "pct_rural", ylab = "Asdf") +
+  labs(title = "Trace plot: percent rural", 
+       y = "Estimate", x = "Draw")
+```
+
+```{r fig.height=5, fig.width=10}
+# density from the 4 chain seems to overlap well
+# suggest convergence and good mixing 
+plot(model, "dens_overlay")
+```
+
+```{r fig.height=5, fig.width=10}
+# posterior predictive checks
+# draws from the posterior predictive dist. seems to be similar to actual data
+pp_check(model, plotfun = "hist", nreps = 5) + 
+  xlab("Crashes") 
+```
+
+
+```{r fig.height=5, fig.width=10}
+# posterior predictive checks
+# draws from the posterior predictive dist. seems to be similar to actual data
+# although there's one outlier?
+pp_check(model) + 
+  xlab("Crashes")
+```
+
+
+```{r fig.height=5, fig.width=10}
+# relatively low autocorrelation 
+plot(model, "acf_bar") +  
+  labs(title = "ACF plots")
+```
+
+```{r fig.height=5, fig.width=10}
+# Compare prior and posterior dist.
+# Seems like the posterior distribution is much narrower
+prior_summary(model)
+posterior_vs_prior(model) 
+```
+
+### Inference
+
+Output of model coefficients: 
+
+```{r}
+summary(model)
+```
+
+A more precise output of model coefficients: 
+
+```{r}
+round(posterior_interval(model, prob = 0.95), 3)
+```
+
+Based on the model output above, the 95% confidence interval of the coefficient of pct_rural is from -1.387 to - 0.093, which doesn't cross 0. So after accounting for population, pct_rural is still important in predicting whether a county is high crash.
+
+Interpretation: for one standard deviation increase in pct_rural (which is around 28%), the odds of a county being high crash by multiply be a factor of 0.4965853, holding population constant. 
+
+(*Note: Initially I build the modeling without scaling the variables and I found pct_rural to be not significant after accounting for population. However, after I scaled the data, pct_rural is significant). 
+
