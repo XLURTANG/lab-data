@@ -1,0 +1,119 @@
+---
+title: "Survival Analysis"
+author: "Linda Tang"
+date: "9/27/2021"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(survival)
+library(survminer)
+library(knitr)
+got <- read_csv("210927_got.csv") %>%
+  select(character_name, duration_in_episodes, is_dead, royal, house, gender)
+```
+
+## KM Curve Analysis
+
+*duration_in_episodes*: Survival for characters
+
+*is_dead*: 1, 0 indicator of death or not
+
+*royal, house, gender*: Stratas to explore
+
+```{r}
+ggsurvplot(survfit(Surv(duration_in_episodes, is_dead) ~ 1, data = got), 
+     xlab = "Episodes", ylab = "Est. Survival Probability",
+     conf.int = F)
+```
+
+```{r}
+ggsurvplot(survfit(Surv(duration_in_episodes, is_dead) ~ royal, 
+                   data = got), 
+     xlab = "Episodes", ylab = "Est. Survival Probability",
+     ylim = c(0, 1),
+     conf.int = T, censor = F, 
+     legend.labs = c("Not Royal", "Royal"))
+```
+
+```{r}
+survdiff(Surv(duration_in_episodes, is_dead) ~ royal, data = got)
+```
+p_value = 0.7, there's no statistically significant difference. 
+
+```{r}
+ggsurvplot(survfit(Surv(duration_in_episodes, is_dead) ~ gender, 
+                   data = got), 
+     xlab = "Episodes", ylab = "Est. Survival Probability",
+     ylim = c(0, 1),
+     conf.int = T, censor = F, 
+     legend.labs = c("Female", "Male"))
+```
+```{r}
+survdiff(Surv(duration_in_episodes, is_dead) ~ gender, data = got)
+```
+p_value = 0.02, there is a statistically significant difference. 
+
+```{r}
+survdiff(Surv(duration_in_episodes, is_dead) ~ house, data = got)
+```
+
+p_value = 0.009 , there's statistical evidence that the house has an impact on survival of characters (at least one house is different). 
+
+## Modeling
+
+*royal, house, gender*: confounding to control 
+
+#### Exponential Model 
+
+AFT model:
+
+```{r}
+aft_exp <- survreg(Surv(duration_in_episodes, is_dead) ~ gender + royal + house, 
+                 data = got, dist = "exponential")
+summary(aft_exp)
+```
+
+The p_value for I(gender = male) is 0.02366, which means it's a statistically significant predictor. Holding all else equal, a male is expected to survive approximately 0.41 times longer than a female. The probability that males survive to time 0.41t is the same females surviving to 1t. 
+
+```{r}
+resids <- (log(got$duration_in_episodes) - aft_exp$linear.predictors) / 
+  (aft_exp$scale)
+
+m1 <- survfit(Surv(resids, is_dead) ~ 1, data = got)
+plot(m1, xlab = "AFT Residuals (Exponential Model)", 
+     ylab = "Survival Probability")
+
+exp.x <- seq(min(resids), max(resids), length = 100)
+exp.y <- pexp(exp.x, lower.tail = F) # F(t)
+lines(exp.x, exp.y, col = "red", lwd = 2)
+```
+
+The residuals doesn't overlap well with the survival function of the assumed distribution, so the Exponential model doesn't fit very well. 
+
+#### Weibull Model
+
+AFT model:
+
+```{r}
+aft_w <- survreg(Surv(duration_in_episodes, is_dead) ~ gender + royal + house, 
+                 data = got, dist = "weibull")
+summary(aft_w)
+```
+
+```{r}
+resids <- (log(got$duration_in_episodes) - aft_w$linear.predictors) / 
+  (aft_w$scale)
+
+m1 <- survfit(Surv(resids, is_dead) ~ 1, data = got)
+plot(m1, xlab = "AFT Residuals (Weibull)", 
+     ylab = "Survival Probability")
+
+exp.x <- seq(min(resids), max(resids), length = 100)
+exp.y <- pweibull(exp.x, shape = 1/aft_w$scale, lower.tail = F) # F(t)
+lines(exp.x, exp.y, col = "red", lwd = 2)
+```
+
+The residuals doesn't overlap well with the survival function of the assumed distribution, so the Weibull model doesn't fit very well. 
