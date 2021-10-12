@@ -1,0 +1,41 @@
+---
+title: "EM_Algorithm"
+author: "Linda Tang"
+date: "10/11/2021"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(palmerpenguins)
+data(penguins)
+
+dat <- penguins[penguins$species != "Chinstrap",]
+dat <- dat[!is.na(dat$flipper_length_mm),]
+```
+
+The data we observe is flipper_length_mm. Seems like a well-separated Gaussian mixture. Group 1 is to the left and group 2 is to the right.
+
+```{r}
+hist(dat$flipper_length_mm)
+```
+
+Let $Z$ be a latent variable, if Z = 1, the penguin belongs to the group to the left and if Z = 2, the penguin belongs to the group to the right.
+
+```{r}
+# initialization
+mu_a <- 185
+sigma_a <- 10
+p_a <- 0.5
+
+mu_g <- 215
+sigma_g <- 10
+p_g <- 1-p_1
+```
+
+```{r}
+prob_A_Z
+```
+
+
+Try implementing the EM algorithm for the penguin flipper length dataset (the relevant variable is flipper_length_mm). Use your final estimated probabilities to classify each penguin into either Adelie or Gentoo and estimate the means and standard deviations of species-specific normal distributions. Note that you actually have the true information available to you (don’t use it for the EM algorithm, of course!). How accurate are your classifications? How close were your parameter estimates?
