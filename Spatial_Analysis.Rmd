@@ -1,0 +1,100 @@
+---
+title: "Spatial"
+author: "Linda Tang"
+date: "11/1/2021"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(sf)
+library(spdep)
+library(ape)
+city <- read_csv("durham_2020_raw.csv")
+nc <- st_read("census_2010_nc_tract/census_2010_nc_tract.shp")
+```
+
+## Task 1: Preprocessing data
+
+```{r}
+city <- city %>%
+  mutate(length_stay = `Q28 Approximately how many years have yo`, 
+         own_rent = factor(`Q31 Do you own or rent your current resi`), 
+         lat = `Block Lat`, 
+         lon = `Block Lon`) %>%
+  filter(!is.na(lon), !is.na(lat)) %>%
+  mutate(lon = lon/1000000, 
+         lat = lat/1000000) %>%
+  select(length_stay, lon, lat)
+```
+
+## Task 2: St as Sf
+
+```{r}
+city <- st_as_sf(city, coords = c("lon", "lat"), 
+              crs = 4269, 
+              remove = F, 
+              agr = "constant")
+```
+## Task 3: Shapefile
+
+```{r}
+nc <- nc %>%
+  filter(STCOFIPS == 37063) %>%
+  select(TRACT, NAME, POP2010)
+```
+
+## Task 4: Moran’s I on areal data
+
+```{r}
+sp_wts <- poly2nb(nc, row.names=nc$name, queen = T)
+sp_mat_std <- nb2mat(sp_wts, style='W')
+sp_mat_std[1:10,1:10] # standardized spatial weight matrix
+```
+
+```{r}
+sp_mat_list <-  nb2listw(sp_wts, style='W')
+sp_mat_list
+
+# 0.2936976 # some correlation
+moran(nc$POP2010, sp_mat_list, nrow(nc), sum(sp_mat_std))
+```
+
+```{r}
+set.seed(123)
+moran.mc(nc$POP2010, sp_mat_list, nsim = 999)
+```
+```{r}
+moran.plot(nc$POP2010, sp_mat_list,
+           xlab = "Pop",
+           ylab = "Lagged Pop")
+```
+
+## Task 5: Spatial weight matrix point-valued data
+
+```{r}
+dists <- as.matrix(dist(cbind(city$lon, city$lat))) + 0.01
+dists <- 1/dists
+diag(dists) <- 0
+```
+
+## Task 6: Moran’s I for point-valued data
+
+```{r}
+Moran.I(city$length_stay, dists, na.rm = TRUE)
+```
+
+## Task 7: REPRODUCE the map
+
+```{r}
+ggplot(nc) + 
+  geom_sf(aes(fill = POP2010), alpha = 1) +
+  geom_sf(data = city, 
+          aes(color = length_stay), 
+          alpha = 0.4, 
+          size  = 1) +
+  scale_color_gradient(low = "#fee8c8", high = "#7f0000") +
+  labs(x = "Long.", y = "Lat.") + 
+  theme_bw(base_size = 10)
+```
